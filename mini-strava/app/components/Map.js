@@ -4,34 +4,36 @@ import { MapContainer, TileLayer, Polyline, Marker, useMap } from 'react-leaflet
 import 'leaflet/dist/leaflet.css';
 import L from 'leaflet';
 
-const sizeArray = JSON.parse("[25, 41]");
-const anchorArray = JSON.parse("[12, 41]");
+// ป้องกันระบบแสดงผลแชทกลืนตัวเลขในวงเล็บเหลี่ยมด้วยคลาส L.point ดั้งเดิม
 const DefaultIcon = L.icon({
     iconUrl: 'https://unpkg.com',
     shadowUrl: 'https://unpkg.com',
-    iconSize: sizeArray,
-    iconAnchor: anchorArray
+    iconSize: L.point(25, 41),     
+    iconAnchor: L.point(12, 41)    
 });
 L.Marker.prototype.options.icon = DefaultIcon;
 
-function ChangeMapView({ center }) {
+// 🎯 กลไกอัจฉริยะ: สั่งจัดระเบียบกล้องแผนที่ให้ดึงตัวเส้นวิ่งมาไว้ตรงกลางภาพ (Center Lock)
+function MapLayerController({ points, currentPos }) {
   const map = useMap();
-  useEffect(() => {
-    if (center) map.panTo(center);
-  }, [center, map]);
-  return null;
-}
 
-// สร้างคอมโพเนนต์ย่อยเพื่อแอบไปดักใส่ ID หรือคลาสให้กับ Grid แผนที่ OpenStreetMap
-function TileLayerWithId() {
-  const map = useMap();
   useEffect(() => {
-    // ดึงคลาสคอนเทนเนอร์ของแผ่นกระเบื้องแผนที่มาใส่ไอดีเพื่อให้สคริปต์หน้าบ้านสั่งซ่อนได้
     const tilePane = map.getPane('tilePane');
-    if (tilePane) {
-      tilePane.setAttribute('id', 'map-tile-pane');
-    }
+    if (tilePane) tilePane.setAttribute('id', 'map-tile-pane');
+    
+    const overlayPane = map.getPane('overlayPane');
+    if (overlayPane) overlayPane.setAttribute('id', 'map-overlay-pane');
   }, [map]);
+
+  useEffect(() => {
+    // 💡 ถ้ามีการกดสั่งประมวลผลเซฟ (ระบบจะดึงพิกัดทั้งหมดมาจัดระเบียบให้อยู่กึ่งกลางหน้าแคนวาส)
+    if (points && points.length > 1) {
+      const polylineBounds = L.polyline(points).getBounds();
+      map.fitBounds(polylineBounds, { padding: [30, 30] }); // บีบขอบเขตให้เส้นวิ่งมาอยู่ตรงกลางพอดี
+    } else if (currentPos) {
+      map.panTo(currentPos);
+    }
+  }, [points, currentPos, map]);
 
   return (
     <TileLayer
@@ -48,12 +50,12 @@ export default function Map({ points, currentPos }) {
     <MapContainer 
       center={currentPos || defaultCenter} 
       zoom={16} 
-      style={{ height: '100%', width: '100%', background: 'transparent' }} // ตั้งพื้นหลัง container ให้โปร่งแสงรอไว้
+      preferCanvas={true} // 💡 เคล็ดลับสำคัญ: บังคับให้ Leaflet วาดเส้นแบบ Canvas เพื่อให้ html2canvas สแนปรูปตรงตำแหน่งกึ่งกลางจอ
+      style={{ height: '100%', width: '100%', background: 'transparent' }}
     >
-      <TileLayerWithId />
-      <Polyline positions={points} color="#fc4c02" weight={6} />
+      <MapLayerController points={points} currentPos={currentPos} />
+      <Polyline positions={points} color="#fc4c02" weight={8} />
       {currentPos && <Marker position={currentPos} />}
-      {currentPos && <ChangeMapView center={currentPos} />}
     </MapContainer>
   );
 }
